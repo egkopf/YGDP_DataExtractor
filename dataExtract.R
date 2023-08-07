@@ -7,7 +7,7 @@ SURVEY_NAME = "S13" # Survey 13, for example
 
 con <- dbConnect(RSQLite::SQLite(), here("ygdpDB_20210407.db"))
 # connect to the local database that contains the new survey data in long format
-# dbListTables(con)
+dbListTables(con)
 
 ### Filter just the responses from the new survey
 dataRoughCollect <- tbl(con, "ratings")
@@ -202,29 +202,102 @@ NUM_SENTENCES = 252
 sentences <- collect(tbl(con, "sentences"))
 colnames = colnames(cleanTable)
 
+
+for (i in 1:ENTRY_LENGTH) {
+  if ((cleanTable$CG_Min[i] != "NA" && cleanTable$CG_Min[i] < 3) || (cleanTable$CU_Max[i] != "NA" && cleanTable$CU_Max[i] > 3)) {
+    cleanTable$Min_Max_Di[i] <- "Consider"
+  } else {
+    cleanTable$Min_Max_Di[i] <- "No"
+  }
+}
+
+for (i in 1:ENTRY_LENGTH) {
+  if ((cleanTable$CG_Score[i] < 4) || (cleanTable$CU_Score[i] > 2)) {
+    cleanTable$C_Sum_Disc[i] <- "Consider"
+  } else {
+    cleanTable$C_Sum_Disc[i] <- "No"
+  }
+}
+
+for (i in 1:ENTRY_LENGTH) {
+  if ((cleanTable$Min_Max_Di[i] == "Consider") && (cleanTable$C_Sum_Disc[i] == "Consider")) {
+    cleanTable$Controls_D[i] <- "Discard"
+  } else {
+    if ((cleanTable$Min_Max_Di[i] == "No") && (cleanTable$C_Sum_Disc[i] == "No")) {
+      cleanTable$Controls_D[i] <- "No"
+    } else {
+      cleanTable$Controls_D[i] <- "Flag"
+    }
+  }
+}
+
 # Heads up- this loop takes a couple of minutes time
 for (i in 1:ENTRY_LENGTH) {
   CG_MIN = "NA"
   CU_MAX = "NA"
-  for (j in 18:282) {
+  
+  CG_SUM = 0
+  CG_COUNT = 0
+  
+  CU_SUM = 0
+  CU_COUNT= 0
+  
+  for (j in 18:280) {
     for (k in 1:NUM_SENTENCES) {
-      if (sentences$sentenceID[k] == colnames[j]) {
+      if (sentences$sentenceID[k] == colnames[j] || paste("F", sentences$sentenceID[k], sep="") == colnames[j]) {
         if (sentences$sentenceType[k] == "CG") {
-          if (CG_MIN == "NA" || cleanTable[[j]][i] < CG_MIN) {
-            CG_MIN = cleanTable[[j]][i]
+          if (cleanTable[[j]][i] != 0) {
+            CG_COUNT <- CG_COUNT+1
+            CG_SUM <- CG_SUM + cleanTable[[j]][i]
+            if (CG_MIN == "NA" || cleanTable[[j]][i] < CG_MIN) {
+              CG_MIN = cleanTable[[j]][i]
+            }
           }
+          
         }
         if (sentences$sentenceType[k] == "CU") {
-          if (CU_MAX == "NA" || cleanTable[[j]][i] > CU_MAX) {
-            CU_MAX = cleanTable[[j]][i]
+          if (cleanTable[[j]][i] != 0) {
+            CU_COUNT <- CU_COUNT+1
+            CU_SUM <- CU_SUM + cleanTable[[j]][i]
+            if (CU_MAX == "NA" || cleanTable[[j]][i] > CU_MAX) {
+              CU_MAX = cleanTable[[j]][i]
+            }
           }
         }
       }
       #continue
     }
-    cleanTable$CG_Min[i] = CG_MIN
-    cleanTable$CU_Max[i] = CU_MAX
   }
+  cleanTable$CG_Min[i] = CG_MIN
+  cleanTable$CU_Max[i] = CU_MAX
+    
+    # if (is.nan(CG_MIN) || is.nan(CU_MAX) || CG_MIN[i] < 3 || CU_MAX[i] > 3) {
+    #   cleanTable$Min_Max_Di[i] = "Consider"
+    # } else {
+    #   cleanTable$Min_Max_Di[i] = "No"
+    # }
+    
+  CG_Score <- CG_SUM/CG_COUNT
+  CU_Score <- CU_SUM/CU_COUNT
+    
+  cleanTable$CG_Score[i] <- CG_Score
+  cleanTable$CU_Score[i] <- CU_Score
+    
+    # if (is.nan(CG_Score) || is.nan(CU_Score) || CG_Score < 4 || CU_Score > 2) {
+    #   cleanTable$C_Sum_Disc[i] = "Consider"
+    # } else {
+    #   cleanTable$C_Sum_Disc[i] = "No"
+    # }
+    
+    # if ((cleanTable$Min_Max_Di[i] == "Consider") && (cleanTable$C_Sum_Disc[i] == "Consider")) {
+    #   cleanTable$Controls_D[i] = "Discard"
+    # } else {
+    #   if ((cleanTable$Min_Max_Di[i] == "No") && (cleanTable$C_Sum_Disc[i] == "No")) {
+    #     cleanTable$Controls_D[i] = "No"
+    #   } else {
+    #     cleanTable$Controls_D[i] = "Flag"
+    #   }
+    # }
 }
 
 cleanTable$StartDate = dataRoughCollect$dateTimeStart
@@ -263,15 +336,25 @@ write.csv(cleanTable, "survey13data.csv", row.names=TRUE)
 
 
 # ----------- view some db tables -------------
-# constructions <- collect(tbl(con, "constructions"))
-# sentences <- collect(tbl(con, "sentences"))
-# comments <- collect(tbl(con, "comments"))
-# questions <- collect(tbl(con, "questions"))
-# responses <- collect(tbl(con, "responses"))
-# ratings <- collect(tbl(con, "ratings"))
-# surveys <- collect(tbl(con, "surveys"))
-# survey_comments <- collect(tbl(con, "survey_comments"))
-# dialect_regions <- collect(tbl(con, "dialect_regions"))
-# update_metadata <- collect(tbl(con, "update_metadata"))
-# variables <- collect(tbl(con, "variables"))
-# version_history <- collect(tbl(con, "version_history"))
+census_country_demo <- collect(tbl(con, "census_country_demo"))
+census_urban_areas <- collect(tbl(con, "census_urban_areas"))
+cities <- collect(tbl(con, "cities"))
+cities_ref <- collect(tbl(con, "cities_ref"))
+comments <- collect(tbl(con, "comments"))
+constructions <- collect(tbl(con, "constructions"))
+construction_tags <- collect(tbl(con, "construction_tags"))
+demo_geo <- collect(tbl(con, "demo_geo"))
+dialect_regions <- collect(tbl(con, "dialect_regions"))
+questions <- collect(tbl(con, "questions"))
+ratings <- collect(tbl(con, "ratings"))
+responses <- collect(tbl(con, "responses"))
+sentences <- collect(tbl(con, "sentences"))
+spoken_langs <- collect(tbl(con, "spoken_langs"))
+surveys <- collect(tbl(con, "surveys"))
+survey_comments <- collect(tbl(con, "survey_comments"))
+survey_sentences <- collect(tbl(con, "survey_sentences"))
+tech <- collect(tbl("tech"))
+update_metadata <- collect(tbl(con, "update_metadata"))
+variables <- collect(tbl(con, "variables"))
+version_history <- collect(tbl(con, "version_history"))
+# ratings = merge(ratings, sentences, by="sentenceID")
